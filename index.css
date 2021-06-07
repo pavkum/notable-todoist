@@ -1,0 +1,226 @@
+:root {
+    --color-30: #b8256f;
+    --color-31: #db4035;
+    --color-32: #db4035;
+    --color-33: #fad000;
+    --color-34: #afb83b;
+    --color-35: #7ecc49;
+    --color-36: #299438;
+    --color-37: #6accbc;
+    --color-38: #158fad;
+    --color-39: #14aaf5;
+    --color-40: #96c3eb;
+    --color-41: #4073ff;
+    --color-42: #884dff;
+    --color-43: #af38eb;
+    --color-44: #eb96eb;
+    --color-45: #e05194;
+    --color-46: #ff8d85;
+    --color-47: #808080;
+    --color-48: #b8b8b8;
+    --color-49: #ccac93;
+}
+
+.todoist-runtime-host pre,
+.todoist-runtime-host .copy {
+    display: none !important;
+}
+
+.todoist-runtime {
+    flex-direction: column;
+    padding: 0 1rem;
+}
+
+.todoist-item-container {
+    flex-direction: row;
+    margin: 0.2rem 0;
+}
+
+.todoist-item-container,
+.todoist-runtime {
+    display: flex;
+    width: 100%;
+}
+
+.todoist-content-container {
+    width: 100%;
+    border-bottom: 1px solid;
+    border-color: inherit;
+}
+
+.todoist-checkbox-container {
+    margin-right: 1rem;
+    position: relative;
+}
+
+.todoist-item-container[data-completed="true"] .todoist-content {
+    text-decoration: line-through;
+}
+
+.todoist-checkbox {
+    width: 1px;
+    opacity: 0.1;
+    position: absolute;
+}
+
+.todoist-checkbox~label::before {
+    content: '◯';
+}
+
+.todoist-checkbox:checked~label::before {
+    content: '◉';
+}
+
+.todoist-checkbox~label[data-priority="1"]::before {
+    color: var(--color-33);
+}
+
+.todoist-checkbox~label[data-priority="2"]::before {
+    color: var(--color-41);
+}
+
+.todoist-checkbox~label[data-priority="3"]::before {
+    color: var(--color-32);
+}
+
+.todoist-checkbox~label[data-priority="4"]::before {
+    color: var(--color-30);
+}
+
+.todoist-content-meta {
+    display: flex;
+    flex-direction: row-reverse;
+    justify-content: space-between;
+    width: 100%;
+    font-size: 0.75rem;
+}
+
+.todoist-project {
+    flex-wrap: nowrap;
+}
+
+.todoist-project::after {
+    content: "\25CF";
+    margin-left: 0.25rem;
+}
+
+.todoist-labels {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    max-width: 70%;
+}
+
+.todoist-project,
+.todoist-label {
+    margin: 0.1rem;
+    padding: 0.25rem;
+}
+
+.todoist-label[data-color="30"],
+.todoist-project[data-color="30"]::after {
+    color: var(--color-30);
+}
+
+.todoist-label[data-color="31"],
+.todoist-project[data-color="31"]::after {
+    color: var(--color-31);
+}
+
+.todoist-label[data-color="32"],
+.todoist-project[data-color="32"]::after {
+    color: var(--color-32);
+}
+
+.todoist-label[data-color="33"],
+.todoist-project[data-color="33"]::after {
+    color: var(--color-33);
+}
+
+.todoist-label[data-color="34"],
+.todoist-project[data-color="34"]::after {
+    color: var(--color-34);
+}
+
+.todoist-label[data-color="35"],
+.todoist-project[data-color="35"]::after {
+    color: var(--color-35);
+}
+
+.todoist-label[data-color="36"],
+.todoist-project[data-color="36"]::after {
+    color: var(--color-36);
+}
+
+.todoist-label[data-color="37"],
+.todoist-project[data-color="37"]::after {
+    color: var(--color-37);
+}
+
+.todoist-label[data-color="38"],
+.todoist-project[data-color="38"]::after {
+    color: var(--color-38);
+}
+
+.todoist-label[data-color="39"],
+.todoist-project[data-color="39"]::after {
+    color: var(--color-39);
+}
+
+.todoist-label[data-color="40"],
+.todoist-project[data-color="40"]::after {
+    color: var(--color-40);
+}
+
+.todoist-label[data-color="41"],
+.todoist-project[data-color="41"]::after {
+    color: var(--color-41);
+}
+
+.todoist-label[data-color="42"],
+.todoist-project[data-color="42"]::after {
+    color: var(--color-42);
+}
+
+.todoist-label[data-color="43"],
+.todoist-project[data-color="43"]::after {
+    color: var(--color-43);
+}
+
+.todoist-label[data-color="44"],
+.todoist-project[data-color="44"]::after {
+    color: var(--color-44);
+}
+
+.todoist-label[data-color="45"],
+.todoist-project[data-color="45"]::after {
+    color: var(--color-45);
+}
+
+.todoist-label[data-color="46"],
+.todoist-project[data-color="46"]::after {
+    color: var(--color-46);
+}
+
+.todoist-label[data-color="47"],
+.todoist-project[data-color="47"]::after {
+    color: var(--color-47);
+}
+
+.todoist-label[data-color="48"],
+.todoist-project[data-color="48"]::after {
+    color: var(--color-48);
+}
+
+.todoist-label[data-color="49"],
+.todoist-project[data-color="49"]::after {
+    color: var(--color-49);
+}
+
+.todoist-error {
+    color: var(--color-31);
+}
+
+.todoist-info {
+    color: var(--color-36);
+}
