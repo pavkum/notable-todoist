@@ -30,7 +30,7 @@ Todoist integration with [Notable](https://notable.app/) note talking applicatio
   - [X] Task filtering with two-way sync
   - [X] Task rendering with labels, Projects, Priority and sections
   - [ ] Show due date
-  - [ ] Support for grouping
+  - [ ] Support for grouping and sorting
   - [ ] Add tasks with predefined task meta (project, labels, priority, due)
   
     
