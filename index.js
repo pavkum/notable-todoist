@@ -1,10 +1,22 @@
 const todoistPlugin = (function() {
     const baseEndPoint = 'https://api.todoist.com/rest/v1/';
+    const syncEndPoint = 'https://api.todoist.com/sync/v8/sync';
     let initialized = false;
+
+    let syncToken = '*'; // initial valuel
 
     let projectCache = {};
     let labelCache = {};
     let sectionCache = {};
+
+    const todoistSectionTemplate = _.template(`
+      <div class='todoist-section-container'>
+        <div class='todoist-section-name'></div>
+        <div class='todoist-section-items'>
+          <%- o.html %>
+        </div>
+      </div>
+    `)
 
     // unable to override lodash template variable. Use o. everywhere
     const todoistItemTemplate = _.template(`
@@ -24,7 +36,9 @@ const todoistPlugin = (function() {
           </div>
           <div class='todoist-content-meta'>
               <div class='todoist-project' data-color='<%= o.project.color %>'>
-                <span> <%= o.project.name %> </span>
+                <span> 
+                  <%= o.project.name %> 
+                </span>
                 <% if (o.section_id) { %>
                   <span>&nbsp;/&nbsp;</span>
                   <span> <%= o.section.name %> </span>
@@ -38,6 +52,13 @@ const todoistPlugin = (function() {
                 <% }) %>
               </div>
           </div>
+          <% if (o.children && o.children.length) { %>
+            <div class='todoist-item-children'>
+              <% o.children.forEach(child => { %>
+                <% todoistItemTemplate(child) %>
+              <% }) %>
+          </div>
+          <% } %>
         </div>
       </div>
     `)
@@ -46,9 +67,9 @@ const todoistPlugin = (function() {
 
     const todoistInfoTemplate = _.template(`<div class='todoist-info'> <%= o.data %> </div>`)
 
-    function getError(response) {
+    function getError(id) {
         let errorText = "";
-        switch (response) {
+        switch (id) {
             case "Empty token":
                 errorText = "Please set todoist token in your custom JS. Please refer to documentation"
                 break;
@@ -58,6 +79,33 @@ const todoistPlugin = (function() {
 
             case "JSON_PARSE_ERROR":
                 errorText = "JSON specified in the config is invalid. Please validate it"
+                break;
+
+            case "INVALID_LABEL":
+                errorText = "Label specified in the config doesn't exists or not created"
+                break;
+
+            case "INVALID_PROJECT":
+                errorText = "Project specified in the config doesn't exists or not created"
+                break;
+
+            case "INVALID_SECTION":
+                errorText = "Section specified in the config doesn't exists or not created"
+                break;
+
+            case "INVALID_SECTION_FOR_PROJECT":
+                errorText = "Section specified does't below to the project in the config. Please check";
+                break;
+
+            case "INVALID_PROJECT_GROUPBY":
+            case "INVALID_PROJECT_SORTBY":
+            case "INVALID_LABEL_GROUPBY":
+            case "INVALID_LABEL_SORTBY":
+            case "INVALID_FILTER_GROUPBY":
+            case "INVALID_FILTER_SORTBY":
+            case "INVALID_MODE":
+            case "INVALID_CONFIG":
+                errorText = "Invalid todoist config. Please refer to https://github.com/pavkum/notable-todoist/blob/main/README.md for more information"
         }
         return {
             status: "ERROR",
@@ -79,9 +127,9 @@ const todoistPlugin = (function() {
                 let response;
 
                 if (status) { // close
-                    response = await syncData(`tasks/${todoistId}/close`, "POST");
+                    response = await syncDataViaRestAPI(`tasks/${todoistId}/close`, "POST");
                 } else { // reopen
-                    response = await syncData(`tasks/${todoistId}/reopen`, "POST");
+                    response = await syncDataViaRestAPI(`tasks/${todoistId}/reopen`, "POST");
                 }
 
                 if (response.status === "ERROR") {
@@ -93,7 +141,33 @@ const todoistPlugin = (function() {
         })
     }
 
-    async function syncData(endpoint, method) {
+    async function getMetaViaSyncAPI() {
+        const response = await fetch(syncEndPoint, {
+            method: "GET",
+            headers: {
+                "Authorization": `Bearer ${window.TODOIST_TOKEN}`
+            },
+            data: {
+                'sync_token': syncToken,
+                'resource_types': JSON.stringify(['projects', 'labels', 'sections'])
+            }
+        });
+
+        if (response.ok) {
+            const data = await response.json();
+
+            return {
+                "status": "SUCCESS",
+                "data": data
+            }
+
+        } else {
+            const text = await response.text();
+            return getError(text)
+        }
+    }
+
+    async function syncDataViaRestAPI(endpoint, method) {
         const response = await fetch(`${baseEndPoint}${endpoint}`, {
             method: method || "GET",
             headers: {
@@ -121,31 +195,21 @@ const todoistPlugin = (function() {
         }
     }
 
-    async function refreshMetaCache(name) {
-        const data = await syncData(name);
+    async function refreshMeta() {
+        const data = await getMetaViaSyncAPI();
 
-        if (data.status === "SUCCESS") {
-            const cache = {}
-            data.data.forEach(item => {
-                cache[item.id] = item;
-            })
-            return cache;
-        } else {
-            alert(`An error occured while refresh Todoist ${name}`, data.data)
-            return {}
-        }
+        syncToken = data.sync_token;
+
+        refreshMetaByCache(data, 'projects', projectCache);
+        refreshMetaByCache(data, 'sections', sectionCache);
+        refreshMetaByCache(data, 'labels', labelCache);
     }
 
-    async function refreshLabelsCache() {
-        labelCache = await refreshMetaCache('labels');
-    }
-
-    async function refreshProjectsCache() {
-        projectCache = await refreshMetaCache('projects');
-    }
-
-    async function refreshSectionsCache() {
-        sectionCache = await refreshMetaCache('sections');
+    function refreshMetaByCache(response, name, cache) {
+        const array = response[name] || [];
+        array.forEach(obj => {
+            cache[project.id] = obj
+        });
     }
 
     function prepareAndGetRuntimeContainer(node) {
@@ -198,13 +262,326 @@ const todoistPlugin = (function() {
         container.innerHTML = todoistErrorTemplate(error);
     }
 
-    async function render(node, filter) {
+    function validateConfig(config) {
+        const status = {
+            status: "ERROR",
+            description: null
+        }
+
+        try {
+            let groupBy = config[config.mode]['groupBy'] || "none";
+            let sortBy = config[config.mode]['sortBy'] || "order";
+            switch (config.mode) {
+                case "project":
+                    // allowed groups
+                    if (['section', 'priority', 'date', "none"].indexOf(groupBy) === -1) {
+                        status.description = "INVALID_PROJECT_GROUPBY"
+                    }
+
+                    // allowed sort
+                    if (['order', 'date', 'priority', 'content'].indexOf(sortBy) === -1) {
+                        status.description = "INVALID_PROJECT_SORTBY"
+                    }
+
+                    break;
+                case "label":
+                    // allowed groups
+                    if (['project', 'priority', 'date', "none"].indexOf(groupBy) === -1) {
+                        status.description = "INVALID_LABEL_GROUPBY"
+                    }
+
+                    // allowed sort
+                    if (['order', 'date', 'priority', 'content'].indexOf(sortBy) === -1) {
+                        status.description = "INVALID_LABEL_SORTBY"
+                    }
+                    break;
+                case "filter":
+                    // allowed groups
+                    if (['project', 'priority', 'date', "none"].indexOf(groupBy) === -1) {
+                        status.description = "INVALID_FILTER_GROUPBY"
+                    }
+
+                    // allowed sort
+                    if (['order', 'date', 'priority', 'content'].indexOf(sortBy) === -1) {
+                        status.description = "INVALID_FILTER_SORTBY"
+                    }
+                    break;
+
+                default:
+                    status.description = "INVALID_MODE"
+            }
+        } catch (error) {
+            status.description = "INVALID_CONFIG"
+        }
+
+        if (!status.description) {
+            status.status = "SUCCESS";
+        }
+
+        return status;
+    }
+
+    function defaultSortCallBack(items, property, sortOrder) {
+        return items.sort(function(first, second) {
+            if (sortOrder === "asc") {
+                return first[property] - second[property];
+            } else {
+                return second[property] - first[property];
+            }
+        });
+    }
+
+    function sortBy(items, config) {
+        let sorted;
+        switch (config.sortBy) {
+            case "date":
+                sorted = items.sort(function(first, second) {
+                    const firsDate = new Date(first.datetime || first.date);
+                    const secondDate = new Date(second.datetime || second.date);
+
+                    if (config.sortOrder === "asc") {
+                        return firsDate - secondDate;
+                    } else {
+                        return secondDate - firsDate;
+                    }
+
+                })
+                break;
+            case "priority":
+                sorted = items.sort(function(first, second) {
+                    // priority is in reverse order. 1 means least and 4 means higher
+                    if (config.sortOrder === "asc") {
+                        return second.priority - first.priority;
+                    } else {
+                        return first.priority - second.priority;
+                    }
+                })
+                break;
+
+
+            case "content":
+                sorted = defaultSortCallBack(items, "content", config.sortOrder);
+                break;
+
+            case "order":
+                sorted = defaultSortCallBack(items, "order", config.sortOrder);
+                break;
+
+            default:
+                sorted = defaultSortCallBack(items, "order", config.sortOrder);
+                break;
+        }
+
+        return sorted;
+    }
+
+    function groupBy(items, config) {
+        let groups = [];
+
+        switch (config.groupBy) {
+            case "date":
+                const today = new Date();
+                groups = _.groupBy(items, function(item) {
+                    let itemDate = item.due.datetime || item.due.date;
+                    itemDate = new Date(itemDate);
+
+                    // compare today to easily calculate overdue and upcoming
+                    if (itemDate.getDate() === today.getDate() && itemDate.getMonth() === today.getMonth() && itemDate.getFullYear() === today.getFullYear()) {
+                        return "Today";
+                    } else if (itemDate < today) {
+                        return "Overdue";
+                    } else if (itemDate > today) {
+                        return "Upcoming";
+                    } else {
+                        // wont come here
+                    }
+                })
+                break;
+
+            case "section":
+                groups = _.groupBy(items, function(item) {
+                    // assumes all the cache is refreshed
+                    if (item.section_id === 0) {
+                        return "No Section";
+                    } else {
+                        return sectionCache[item.section_id].name
+                    }
+                });
+                break;
+
+            case "project":
+                groups = _.groupBy(items, function(item) {
+                    // assumes all the cache is refreshed
+                    return projectCache[item.project_id].name
+                });
+                break;
+
+            case "priority":
+                groups = _.groupBy(items, function(item) {
+                    // assumes all the cache is refreshed
+                    let priority; // API priority is in reverse order
+                    switch (item.priority) {
+                        case 4:
+                            priority = 'P1';
+                            break;
+
+                        case 3:
+                            priority = 'P2';
+                            break;
+
+                        case 2:
+                            priority = 'P3';
+                            break;
+
+                        case 1:
+                            priority = 'P4';
+                            break;
+
+                        default:
+                            priority = 'P4';
+                            break;
+                    }
+                    return priority;
+                });
+                break;
+            default:
+                // for none
+                groups = items
+        }
+
+        return groups;
+    }
+
+    function recursivelyPopulateItemChildren(item, childItems, config) {
+        let filteredChildItems = _.filter(childItems, childItem => {
+            return childItem.parent_id === item.id;
+        });
+
+        filteredChildItems = sortBy(filteredChildItems, config);
+
+        filteredChildItems.forEach(childItem => {
+            childItem = getItemWithMeta(childItem);
+            recursivelyPopulateItemChildren(childItem, childItems, config);
+        });
+
+        item.children = filteredChildItems;
+
+        return item;
+    }
+
+    function getItemWithMeta(item) {
+        item.project = projectCache[item.project_id];
+
+        item.labels = item.label_ids.map(labelId => {
+            return labelCache[labelId];
+        });
+
+        if (item.section_id) {
+            item.section = sectionCache[item.section_id];
+        }
+        return item;
+    }
+
+
+    function getObjByName(name, cache) {
+        const keys = Object.keys(cache);
+
+        let matchedKey = -1;
+        for (let i = 0; i < keys.length; i++) {
+            if (cache[keys[i]].name === name) {
+                matchedKey = keys[i];
+                break;
+            }
+        }
+
+        return cache[matchedKey];
+    }
+
+    async function render(node, config) {
         if (!initialized) {
             renderError(node, getError('NO_TOKEN'))
             return
         }
 
-        const response = await syncData(`tasks?filter=${encodeURIComponent(filter)}`);
+        const configValidity = validateConfig(config);
+
+        if (configValidity.status === "ERROR") {
+            renderError(node, getError(configValidity.description));
+            return;
+        }
+
+        // check modes
+        let query;
+        const configQuery = config[config.mode]['query'] || "";
+        switch (config.mode) {
+            case "filter":
+                query = `filter=${encodeURIComponent(configQuery)}`;
+                break;
+
+            case "project":
+                const projectParts = configQuery.split("/");
+                let projectName = projectParts[0];
+                let sectionName = projectParts[1];
+
+                let project = getObjByName(projectName, projectCache);
+
+                if (!project) {
+                    // give it another try
+                    await refreshMeta();
+                }
+
+                project = getObjByName(projectName, projectCache);
+
+                if (!project) {
+                    renderError(node, getError('INVALID_PROJECT'))
+                    return;
+                }
+
+                let section;
+                if (sectionName) {
+                    section = getObjByName(projectParts[1], sectionCache);
+                }
+
+                if (sectionName && !section) {
+                    renderError(node, getError('INVALID_SECTION'));
+                    return;
+                }
+
+                if (sectionName && section && section.project_id === project.id) {
+                    // preference is for section filtering
+                    query = `section_id=${section.id}`
+                } else if (sectionName && section && section.project_id !== project.id) {
+                    renderError(node, getError('INVALID_SECTION_FOR_PROJECT'));
+                    return;
+                } else {
+                    query = `project_id=${project.id}`
+                }
+
+                break;
+
+            case "label":
+                let label = getObjByName(configQuery, labelCache);
+
+                if (!label) {
+                    // give it another try
+                    await refreshMeta();
+                }
+
+                label = getObjByName(configQuery, labelCache);
+
+                if (!label) {
+                    renderError(node, getError('INVALID_LABEL'))
+                    return;
+                }
+
+                query = `label_id=${label.id}`;
+                break;
+
+            default:
+                // wont come here
+        }
+
+        const response = await syncDataViaRestAPI(`tasks?${query}`);
 
         if (response.status === 'ERROR') {
             renderError(node, response);
@@ -230,37 +607,86 @@ const todoistPlugin = (function() {
         const sectionIds = _.map(items, item => item.section_id);
 
         if (_.difference(projectIds, projectIdsInCache).length) {
-            await refreshProjectsCache();
+            await refreshMeta();
         }
 
         if (_.difference(labelIds, labelsInCache).length) {
-            await refreshLabelsCache();
+            await refreshMeta();
         }
 
         // exclude 0 from section Ids as it signifies no section
         if (_.difference(_.without(sectionIds, 0), sectionsInCache).length) {
-            await refreshSectionsCache();
+            await refreshMeta();
         }
 
 
+        let parentChildTasks = {};
 
-        let html = '';
-        items.forEach(item => {
-            // update project
-            item.project = projectCache[item.project_id];
+        if (config.mode !== "filter") {
+            parentChildTasks = _.groupBy(items, item => {
+                if (!!item.parent_id) {
+                    return "parent";
+                } else {
+                    return "child";
+                }
+            });
+        } else {
+            parentChildTasks = {
+                "parent": items
+            }
+        }
 
-            item.labels = item.label_ids.map(labelId => {
-                return labelCache[labelId];
+        // group top level tasks
+        let groups = groupBy(parentChildTasks.parent, config[config.mode]);
+
+        if (_.isArray(groups)) {
+            // no group. Just a section
+            // create dummy section for looping
+            groups = {
+                "-1": groups
+            }
+        }
+
+        // loop through sections and sort
+        const containerFragment = document.createDocumentFragment();
+
+        // append dummy element
+        const dummyElement = document.createElement('div');
+        dummyElement.id = 'dummy';
+
+        containerFragment.append(dummyElement);
+
+        const sections = Object.keys(groups);
+        sections.forEach(section => { // _.each is not exposed. Use loop
+            let sectionItems = groups[section];
+
+            // sort items
+            sectionItems = sortBy(sectionItems, config[config.mode]);
+
+            // render items
+            let html = "";
+            sectionItems.forEach(item => {
+                // update project
+                item = getItemWithMeta(item);
+
+                // recursively identify child tasks
+                item = recursivelyPopulateItemChildren(item, parentChildTasks.child, config[config.mode]);
+                // create dummy element for appending to fragment
+                html += todoistItemTemplate(item);
             });
 
-            if (item.section_id) {
-                item.section = sectionCache[item.section_id];
+            // render items
+            if (section === "-1") {
+                // no section
+                containerFragment.querySelector('#dummy').innerHTML = html;
+            } else {
+                containerFragment.querySelector('#dummy').innerHTML += todoistSectionTemplate({
+                    html: html
+                })
             }
-
-            html += todoistItemTemplate(item);
         });
 
-        container.innerHTML = html;
+        container.innerHTML = containerFragment.querySelector('#dummy').innerHTML;
     }
 
     return {
@@ -270,10 +696,7 @@ const todoistPlugin = (function() {
 
                 setUpListener();
 
-                await refreshProjectsCache();
-                await refreshLabelsCache();
-                await refreshSectionsCache();
-
+                await refreshMeta();
             } else {
                 initialized = false;
             }
@@ -281,8 +704,8 @@ const todoistPlugin = (function() {
             return initialized;
         },
 
-        renderItems: function(node, filter) {
-            render(node, filter);
+        renderItems: function(node, config) {
+            render(node, config);
         },
 
         renderError: function(node, error) {
@@ -296,9 +719,8 @@ const renderItems = function(nodes) {
     nodes.forEach(node => {
         try {
             const jsonBody = JSON.parse(node.innerText.replace(/\s/g, ""))
-            const filter = jsonBody.filter || ""
 
-            todoistPlugin.renderItems(node, filter);
+            todoistPlugin.renderItems(node, jsonBody);
         } catch (error) {
             todoistPlugin.renderError(node, 'JSON_PARSE_ERROR')
         }
