@@ -31,6 +31,33 @@
     padding: 0 1rem;
 }
 
+.todoist-section-name {
+    border-bottom: 1px solid;
+    border-color: inherit;
+    padding: 0.5rem 0;
+    font-weight: bold;
+}
+
+.todoist-expand-collapse {
+    position: absolute;
+    right: 150%;
+}
+
+.todoist-expand-collapse::before {
+    font-family: 'Material Icons';
+    font-size: large;
+    cursor: pointer;
+}
+
+.todoist-item-container[data-expanded="true"]>.todoist-checkbox-container>.todoist-expand-collapse::before {
+    content: 'minus'
+}
+
+.todoist-item-container[data-expanded="false"]>.todoist-checkbox-container>.todoist-expand-collapse::before,
+.todoist-item-container>.todoist-checkbox-container>.todoist-expand-collapse::before {
+    content: 'plus'
+}
+
 .todoist-item-container {
     flex-direction: row;
     margin: 0.2rem 0;
@@ -44,13 +71,25 @@
 
 .todoist-content-container {
     width: 100%;
-    border-bottom: 1px solid;
-    border-color: inherit;
+}
+
+.todoist-item-children {
+    display: none;
+}
+
+.todoist-item-container[data-expanded="true"]>.todoist-content-container>.todoist-item-children {
+    display: block;
 }
 
 .todoist-checkbox-container {
     margin-right: 1rem;
     position: relative;
+    padding: 0.5rem 0;
+    display: flex;
+}
+
+.todoist-content {
+    padding: 0.5rem 0;
 }
 
 .todoist-item-container[data-completed="true"] .todoist-content {
@@ -63,6 +102,11 @@
     position: absolute;
 }
 
+.todoist-checkbox~label {
+    font-family: 'Material Icons';
+    cursor: pointer;
+}
+
 .todoist-checkbox~label::before {
     content: '◯';
 }
@@ -72,7 +116,7 @@
 }
 
 .todoist-checkbox~label[data-priority="1"]::before {
-    color: var(--color-33);
+    color: var(--color-49);
 }
 
 .todoist-checkbox~label[data-priority="2"]::before {
@@ -80,7 +124,7 @@
 }
 
 .todoist-checkbox~label[data-priority="3"]::before {
-    color: var(--color-32);
+    color: var(--color-33);
 }
 
 .todoist-checkbox~label[data-priority="4"]::before {
@@ -93,6 +137,8 @@
     justify-content: space-between;
     width: 100%;
     font-size: 0.75rem;
+    border-bottom: 1px solid;
+    border-color: inherit;
 }
 
 .todoist-project {

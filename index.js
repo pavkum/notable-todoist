@@ -11,9 +11,11 @@ const todoistPlugin = (function() {
 
     const todoistSectionTemplate = _.template(`
       <div class='todoist-section-container'>
-        <div class='todoist-section-name'></div>
+        <div class='todoist-section-name'>
+          <%= o.name %>
+        </div>
         <div class='todoist-section-items'>
-          <%- o.html %>
+          <%= o.html %>
         </div>
       </div>
     `)
@@ -29,33 +31,40 @@ const todoistPlugin = (function() {
             <% } %>
             <label for='input-<%= o.id %>' data-priority='<%= o.priority %>'>
             </label>
+            <% if (o.children && o.children.length) { %>
+                <div class='todoist-expand-collapse' data-target='<%= o.id %>'></div>
+            <% } %>
         </div>
         <div class='todoist-content-container'>
           <div class='todoist-content'>
             <%= o.content %>
           </div>
-          <div class='todoist-content-meta'>
-              <div class='todoist-project' data-color='<%= o.project.color %>'>
-                <span> 
-                  <%= o.project.name %> 
-                </span>
-                <% if (o.section_id) { %>
-                  <span>&nbsp;/&nbsp;</span>
-                  <span> <%= o.section.name %> </span>
-                <% } %>
-              </div>
-              <div class='todoist-labels'>
-                <% o.labels.forEach(function (label) { %>
-                  <div class='todoist-label' data-color='<%= label.color %>'>
-                    <%= label.name %>
-                  </div>
-                <% }) %>
-              </div>
-          </div>
+          <% if (!o.parent_id) { %>
+            <div class='todoist-content-meta'>
+                <div class='todoist-project' data-color='<%= o.project.color %>'>
+                    <span> 
+                    <%= o.project.name %> 
+                    </span>
+                    <% if (o.section_id) { %>
+                    <span>&nbsp;/&nbsp;</span>
+                    <span> <%= o.section.name %> </span>
+                    <% } %>
+                </div>
+                <div class='todoist-labels'>
+                    <% o.labels.forEach(function (label) { %>
+                    <div class='todoist-label' data-color='<%= label.color %>'>
+                        <%= label.name %>
+                    </div>
+                    <% }) %>
+                </div>
+            </div>
+          <% } else { %>
+            <div class='todoist-content-meta'></div>
+          <% } %>
           <% if (o.children && o.children.length) { %>
             <div class='todoist-item-children'>
               <% o.children.forEach(child => { %>
-                <% todoistItemTemplate(child) %>
+                <%= o.todoistItemTemplate(child) %> 
               <% }) %>
           </div>
           <% } %>
@@ -139,17 +148,29 @@ const todoistPlugin = (function() {
                 }
             }
         })
+
+        document.addEventListener('click', function(event) {
+            if (event.target.className === "todoist-expand-collapse") {
+                event.stopPropagation();
+
+                const id = event.target.dataset.target;
+
+                const parent = document.getElementById(id);
+
+                if (parent.dataset.expanded === "true") {
+                    parent.dataset.expanded = "false";
+                } else {
+                    parent.dataset.expanded = "true";
+                }
+            }
+        })
     }
 
     async function getMetaViaSyncAPI() {
-        const response = await fetch(syncEndPoint, {
+        const response = await fetch(`${syncEndPoint}?sync_token=${syncToken}&resource_types=${JSON.stringify(['projects', 'labels', 'sections'])}`, {
             method: "GET",
             headers: {
                 "Authorization": `Bearer ${window.TODOIST_TOKEN}`
-            },
-            data: {
-                'sync_token': syncToken,
-                'resource_types': JSON.stringify(['projects', 'labels', 'sections'])
             }
         });
 
@@ -196,19 +217,24 @@ const todoistPlugin = (function() {
     }
 
     async function refreshMeta() {
-        const data = await getMetaViaSyncAPI();
+        const response = await getMetaViaSyncAPI();
 
-        syncToken = data.sync_token;
+        if (response.status === "ERROR") {
+            alert('An error occured while syncing the data');
+            return;
+        }
 
-        refreshMetaByCache(data, 'projects', projectCache);
-        refreshMetaByCache(data, 'sections', sectionCache);
-        refreshMetaByCache(data, 'labels', labelCache);
+        syncToken = response.data.sync_token;
+
+        refreshMetaByCache(response.data, 'projects', projectCache);
+        refreshMetaByCache(response.data, 'sections', sectionCache);
+        refreshMetaByCache(response.data, 'labels', labelCache);
     }
 
     function refreshMetaByCache(response, name, cache) {
         const array = response[name] || [];
         array.forEach(obj => {
-            cache[project.id] = obj
+            cache[obj.id] = obj
         });
     }
 
@@ -321,23 +347,31 @@ const todoistPlugin = (function() {
         return status;
     }
 
-    function defaultSortCallBack(items, property, sortOrder) {
-        return items.sort(function(first, second) {
-            if (sortOrder === "asc") {
-                return first[property] - second[property];
-            } else {
-                return second[property] - first[property];
-            }
-        });
-    }
-
     function sortBy(items, config) {
         let sorted;
         switch (config.sortBy) {
             case "date":
                 sorted = items.sort(function(first, second) {
-                    const firsDate = new Date(first.datetime || first.date);
-                    const secondDate = new Date(second.datetime || second.date);
+                    // No due should always come last
+                    // if asc - default date = 2038-12-31
+                    // if desc - default date = 1971-01-01
+
+                    let defaultDate = null;
+                    if (config.sortOrder === "asc") {
+                        defaultDate = {
+                            date: "2038-12-31"
+                        }
+                    } else {
+                        defaultDate = {
+                            date: "1971-01-01"
+                        }
+                    }
+
+                    const firstDue = first.due || defaultDate;
+                    const secondDue = second.due || defaultDate;
+
+                    const firsDate = new Date(firstDue.datetime || firstDue.date);
+                    const secondDate = new Date(secondDue.datetime || secondDue.date);
 
                     if (config.sortOrder === "asc") {
                         return firsDate - secondDate;
@@ -360,15 +394,36 @@ const todoistPlugin = (function() {
 
 
             case "content":
-                sorted = defaultSortCallBack(items, "content", config.sortOrder);
+                sorted = items.sort(function(first, second) {
+                    if (config.sortOrder === "asc") {
+                        if (first.content > second.content) {
+                            return 1;
+                        } else if (first.content < second.content) {
+                            return -1;
+                        } else {
+                            return 0;
+                        }
+                    } else {
+                        if (first.content > second.content) {
+                            return -1;
+                        } else if (first.content < second.content) {
+                            return 1;
+                        } else {
+                            return 0;
+                        }
+                    }
+                })
                 break;
 
-            case "order":
-                sorted = defaultSortCallBack(items, "order", config.sortOrder);
-                break;
-
+            case "order": // case order is the default
             default:
-                sorted = defaultSortCallBack(items, "order", config.sortOrder);
+                sorted = items.sort(function(first, second) {
+                    if (config.sortOrder === "asc") {
+                        return first.order - second.order;
+                    } else {
+                        return second.order - first.order;
+                    }
+                });
                 break;
         }
 
@@ -381,12 +436,19 @@ const todoistPlugin = (function() {
         switch (config.groupBy) {
             case "date":
                 const today = new Date();
-                groups = _.groupBy(items, function(item) {
-                    let itemDate = item.due.datetime || item.due.date;
-                    itemDate = new Date(itemDate);
+                const groupByDate = _.groupBy(items, function(item) {
+                    const due = item.due;
+                    let itemDate;
 
-                    // compare today to easily calculate overdue and upcoming
-                    if (itemDate.getDate() === today.getDate() && itemDate.getMonth() === today.getMonth() && itemDate.getFullYear() === today.getFullYear()) {
+                    if (due) {
+                        itemDate = due.datetime || due.date;
+                        itemDate = new Date(itemDate);
+                    }
+
+                    if (!due) {
+                        return "No Date"
+                    } else if (itemDate.getDate() === today.getDate() && itemDate.getMonth() === today.getMonth() && itemDate.getFullYear() === today.getFullYear()) {
+                        // compare today to easily calculate overdue and upcoming
                         return "Today";
                     } else if (itemDate < today) {
                         return "Overdue";
@@ -395,7 +457,14 @@ const todoistPlugin = (function() {
                     } else {
                         // wont come here
                     }
-                })
+                });
+                // order manually
+                groups = {
+                    "Overdue": groupByDate['Overdue'] || [],
+                    "Today": groupByDate['Today'] || [],
+                    "Upcoming": groupByDate['Upcoming'] || [],
+                    "No Date": groupByDate['No Date'] || [],
+                }
                 break;
 
             case "section":
@@ -417,7 +486,7 @@ const todoistPlugin = (function() {
                 break;
 
             case "priority":
-                groups = _.groupBy(items, function(item) {
+                const priorityGroups = _.groupBy(items, function(item) {
                     // assumes all the cache is refreshed
                     let priority; // API priority is in reverse order
                     switch (item.priority) {
@@ -443,6 +512,13 @@ const todoistPlugin = (function() {
                     }
                     return priority;
                 });
+                // group by doesn't guarantee order. Arrange manually
+                groups = {
+                    "P1": priorityGroups['P1'] || [],
+                    "P2": priorityGroups['P2'] || [],
+                    "P3": priorityGroups['P3'] || [],
+                    "P4": priorityGroups['P4'] || [],
+                }
                 break;
             default:
                 // for none
@@ -479,6 +555,9 @@ const todoistPlugin = (function() {
         if (item.section_id) {
             item.section = sectionCache[item.section_id];
         }
+
+        item.todoistItemTemplate = todoistItemTemplate; // hack as I'm not able to directly set as template helper
+
         return item;
     }
 
@@ -622,12 +701,12 @@ const todoistPlugin = (function() {
 
         let parentChildTasks = {};
 
-        if (config.mode !== "filter") {
+        if (config.mode === "project") {
             parentChildTasks = _.groupBy(items, item => {
                 if (!!item.parent_id) {
-                    return "parent";
-                } else {
                     return "child";
+                } else {
+                    return "parent";
                 }
             });
         } else {
@@ -660,6 +739,10 @@ const todoistPlugin = (function() {
         sections.forEach(section => { // _.each is not exposed. Use loop
             let sectionItems = groups[section];
 
+            if (section !== "-1" && sectionItems.length === 0) {
+                return;
+            }
+
             // sort items
             sectionItems = sortBy(sectionItems, config[config.mode]);
 
@@ -670,7 +753,7 @@ const todoistPlugin = (function() {
                 item = getItemWithMeta(item);
 
                 // recursively identify child tasks
-                item = recursivelyPopulateItemChildren(item, parentChildTasks.child, config[config.mode]);
+                item = recursivelyPopulateItemChildren(item, parentChildTasks.child || [], config[config.mode]);
                 // create dummy element for appending to fragment
                 html += todoistItemTemplate(item);
             });
@@ -681,6 +764,7 @@ const todoistPlugin = (function() {
                 containerFragment.querySelector('#dummy').innerHTML = html;
             } else {
                 containerFragment.querySelector('#dummy').innerHTML += todoistSectionTemplate({
+                    name: section,
                     html: html
                 })
             }
@@ -718,7 +802,9 @@ const renderItems = function(nodes) {
     console.log(`render item actual`);
     nodes.forEach(node => {
         try {
-            const jsonBody = JSON.parse(node.innerText.replace(/\s/g, ""))
+            // converted html is using &nbsp; as whitespace character. It is removing whitespace characters in between quotes
+            // first replace whitepsace chars by a dummy sequence. Replace all whitespaces and then convert dummy sequence to actual space
+            const jsonBody = JSON.parse(node.innerText.replace(/\w+\s+\w+/g, function(x) { return x.replace(/\s/g, "----") }).replace(/\s/g, '').replace(/----/g, ' '))
 
             todoistPlugin.renderItems(node, jsonBody);
         } catch (error) {
