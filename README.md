@@ -34,7 +34,7 @@ Todoist integration with [Notable](https://notable.app/) note talking applicatio
   2. project
   3. label
 
-  ### Mode **filter**
+  ### Mode filter
   This mode is similar to todoist filter. One can configure any valid [todoist filter](https://todoist.com/help/articles/introduction-to-filters).
   To use filters set *mode* to *filter* and create a json object with key *filter*. The json object should have a key called *query* which contains actual filter query.
   Checkout the example below
@@ -42,13 +42,13 @@ Todoist integration with [Notable](https://notable.app/) note talking applicatio
   ```todoist
   {
     "mode": "filter",
-      "filter": {
-        "query": "(today | overdue) & #Work"
-      }
+    "filter": {
+       "query": "(today | overdue) & #Work"
+    }
   }
   ```
 
-  ### Mode **project**
+  ### Mode project
   This mode is similar to todoist Projects. One can browse all tasks associated with the project or a section of the project here. 
   The configuration is similar to filter. Set *mode* to *project* and create a json object with key *project*. The json object should have a key called *query* which contains *project name* or *project/section name*. 
   Checkout the example below
@@ -57,32 +57,32 @@ Todoist integration with [Notable](https://notable.app/) note talking applicatio
   ```todoist
   {
     "mode": "project",
-      "project": {
-        "query": "Work"
-      }
+    "project": {
+       "query": "Work"
+    }
   }
   ```
   2. Browsing tasks of a section in project
   ```todoist
   {
     "mode": "project",
-      "project": {
-        "query": "Work/Section"
-      }
+    "project": {
+       "query": "Work/Section"
+    }
   }
   ```
   > Project name doesn't start with **#** as it does in filter mode
   
-  ### Mode **label**
+  ### Mode label
   This mode is similar to todoist Labels. One can browse all tasks associated with a label
   The configuration is similar to mode project and label. Set *mode* to *label* and create a json object with key *label*. The json object should have a key called *query* which specifes the label name.
   Checkout the example below
   ```todoist
   {
     "mode": "label",
-      "label": {
-        "query": "events"
-      }
+    "label": {
+       "query": "events"
+    }
   }
   ```
   > label name doesn't start with **@** as it does in filter mode 
@@ -92,12 +92,12 @@ Todoist integration with [Notable](https://notable.app/) note talking applicatio
   ```todoist
   {
     "mode": "project",
-      "project": {
-        "query": "Work",
-        "groupBy": "section",
-        "sortBy": "priority",
-        "sortOrder": "desc"
-      }
+    "project": {
+       "query": "Work",
+       "groupBy": "section",
+       "sortBy": "priority",
+       "sortOrder": "desc"
+    }
   }
   ```
   The available grouping and sorting options for each mode is different. Checkout the table below
@@ -113,6 +113,7 @@ Todoist integration with [Notable](https://notable.app/) note talking applicatio
   - [X] Task rendering with labels, Projects, Priority and sections
   - [ ] Show due date
   - [X] Support for grouping and sorting
+  - [X] Sub tasks 
   - [ ] Auto refresh (as of now refresh happens only when swicthed from edit mode to preview mode)
   - [ ] Add tasks with predefined task meta (project, labels, priority, due)
   
